@@ -172,16 +172,8 @@ class CKA:
         ones = torch.ones(N, 1).to(self.device)
         ones = ones.to(torch.float64)
         result = torch.trace(K @ L)
-        print('####################')
-        print(f'K:{K}')
-        print(f'L:{L}')
-        print(f'K @ L: {K @ L}')
-        print(f'Trace (K @ L): {torch.trace(K @ L)}')
-        print(f'result: {result}')
         result += ((ones.t() @ K @ ones @ ones.t() @ L @ ones) / ((N - 1) * (N - 2))).item()
-        print(f'result with 1st term: {result}')
         result -= ((ones.t() @ K @ L @ ones) * 2 / (N - 2)).item()
-        print(f'result with 2nd term: {result}')
         return (1 / (N * (N - 3)) * result).item()
 
     def compare(self,
@@ -263,42 +255,31 @@ class CKA:
                 self.model2_features.items()
             )):
                 # for flatten
-                X = feat1.flatten(1) 
-                Y = feat2.flatten(1)
-                print(f'X flat.: {X}')
-                print(f'Y flat.: {Y}')
+                X = feat1.flatten(1).to(torch.float64) 
+                Y = feat2.flatten(1).to(torch.float64)
                 K = X @ X.t()
                 L = Y @ Y.t()
                 K.fill_diagonal_(0.0)
                 L.fill_diagonal_(0.0)
-                K = K.to(torch.float64)
-                L = L.to(torch.float64)
-
-                if torch.isinf(K).any() and len(self.failures) == 0:
-                    self.failures.append((X.detach().cpu(), Y.detach().cpu()))
 
                 hsic_kl_sum_flatten[i] += self._HSIC(K, L)
                 hsic_kk_sum_flatten[i] += self._HSIC(K, K)
                 hsic_ll_sum_flatten[i] += self._HSIC(L, L)
                     
                 # for mean
-                X = feat1.mean(dim=1)
-                Y = feat2.mean(dim=1)
-                print(f'X mean.: {X}')
-                print(f'Y mean.: {Y}')
+                X = feat1.mean(dim=1).to(torch.float64) 
+                Y = feat2.mean(dim=1).to(torch.float64) 
                 K = X @ X.t()
                 L = Y @ Y.t()
                 K.fill_diagonal_(0.0)
                 L.fill_diagonal_(0.0)
-                K = K.to(torch.float64)
-                L = L.to(torch.float64)
                 
                 hsic_kl_sum_mean[i] += self._HSIC(K, L)
                 hsic_kk_sum_mean[i] += self._HSIC(K, K)
                 hsic_ll_sum_mean[i] += self._HSIC(L, L)
 
-            del X, Y
-            torch.cuda.empty_cache()
+                del X, Y
+                torch.cuda.empty_cache()
         
         print(hsic_kk_sum_flatten, hsic_kl_sum_flatten, hsic_kl_sum_flatten)
         print(hsic_kk_sum_mean, hsic_kl_sum_mean, hsic_kl_sum_mean)
@@ -307,6 +288,7 @@ class CKA:
         self.hsic_vector_mean = hsic_kl_sum_mean / torch.sqrt(hsic_kk_sum_mean * hsic_ll_sum_mean)
         self.hsic_vector = {'flatten': self.hsic_vector_flatten, 'mean': self.hsic_vector_mean}
 
+        print('################ final')
         print(self.hsic_vector_flatten)
         print(self.hsic_vector_mean)
 
