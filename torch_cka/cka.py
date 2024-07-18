@@ -296,6 +296,9 @@ class CKA:
             # "dataset1_name": self.model1_info['Dataset'],
             # "dataset2_name": self.model2_info['Dataset'],
         }
+
+        print(self.model1_info['Layers'])
+
         if save_path is not None:
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, 'wb') as file:
