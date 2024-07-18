@@ -173,13 +173,8 @@ class CKA:
         """
         N = K.shape[0]
         ones = torch.ones(N, 1).to(self.device)
-        ones = ones.to(torch.float32)
-        print('########################## In _HSIC')
-        print(f'K.dtype: {K.dtype}')
-        print(f'L.dtype: {L.dtype}')
-        print(f'ones.dtype: {ones.dtype}')
+        ones = ones.to(torch.float16)
         result = torch.trace(K @ L)
-        print(f'result.dtype: {result.dtype}')
         result += ((ones.t() @ K @ ones @ ones.t() @ L @ ones) / ((N - 1) * (N - 2))).item()
         result -= ((ones.t() @ K @ L @ ones) * 2 / (N - 2)).item()
         return (1 / (N * (N - 3)) * result).item()
@@ -270,8 +265,8 @@ class CKA:
                 L = Y @ Y.t()
                 K.fill_diagonal_(0.0)
                 L.fill_diagonal_(0.0)
-                K = K.to(torch.float32)
-                L = L.to(torch.float32)
+                K = K.to(torch.float16)
+                L = L.to(torch.float16)
 
                 hsic_kl_sum_flatten[i] += self._HSIC(K, L)
                 hsic_kk_sum_flatten[i] += self._HSIC(K, K)
@@ -284,8 +279,8 @@ class CKA:
                 L = Y @ Y.t()
                 K.fill_diagonal_(0.0)
                 L.fill_diagonal_(0.0)
-                K = K.to(torch.float32)
-                L = L.to(torch.float32)
+                K = K.to(torch.float16)
+                L = L.to(torch.float16)
                 
                 hsic_kl_sum_mean[i] += self._HSIC(K, L)
                 hsic_kk_sum_mean[i] += self._HSIC(K, K)
