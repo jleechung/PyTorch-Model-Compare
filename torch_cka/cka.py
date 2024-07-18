@@ -235,8 +235,6 @@ class CKA:
                 # for flatten
                 X = feat1.flatten(1).to(torch.float64) 
                 K = X @ X.t()
-                if torch.isnan(K).any():
-                    self.failures.append(X)
                 del X
                 Y = feat2.flatten(1).to(torch.float64)
                 L = Y @ Y.t()
@@ -247,7 +245,12 @@ class CKA:
                 hsic_kl_sum_flatten[i] += self._HSIC(K, L)
                 hsic_kk_sum_flatten[i] += self._HSIC(K, K)
                 hsic_ll_sum_flatten[i] += self._HSIC(L, L)
-                    
+
+                print(f'\nCheck range {i} -----------------------------------')
+                print(hsic_kl_sum_mean[i])
+                print(hsic_kk_sum_mean[i])
+                print(hsic_ll_sum_mean[i])
+    
                 # for mean
                 X = feat1.mean(dim=1).to(torch.float64) 
                 K = X @ X.t()
@@ -262,8 +265,14 @@ class CKA:
                 hsic_kk_sum_mean[i] += self._HSIC(K, K)
                 hsic_ll_sum_mean[i] += self._HSIC(L, L)
 
+                print(f'\nCheck range {i} -----------------------------------')
+                print(hsic_kl_sum_mean[i])
+                print(hsic_kk_sum_mean[i])
+                print(hsic_ll_sum_mean[i])
+
                 torch.cuda.empty_cache()
         
+        # nan
         print(hsic_kk_sum_flatten, hsic_kl_sum_flatten, hsic_kl_sum_flatten)
         print(hsic_kk_sum_mean, hsic_kl_sum_mean, hsic_kl_sum_mean)
 
