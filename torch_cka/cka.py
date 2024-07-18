@@ -228,6 +228,49 @@ class CKA:
 
         assert not torch.isnan(self.hsic_matrix).any(), "HSIC computation resulted in NANs"
 
+    def compare_simple_amp(self, dataloader: DataLoader) -> None:
+        self.model1_info['Dataset'] = self.model2_info['Dataset'] = dataloader.dataset.__repr__().split('\n')[0]
+        
+        num_layers = len(self.model1_layers) if self.model1_layers is not None else len(list(self.model1.modules()))
+        hsic_kl_sum = torch.zeros(num_layers)
+        hsic_kk_sum = torch.zeros(num_layers)
+        hsic_ll_sum = torch.zeros(num_layers)
+        
+        num_batches = len(dataloader)
+        for x, *_ in tqdm(dataloader, desc="| Comparing features |", total=num_batches):
+
+            x = x.to(self.device)
+            
+            with torch.autocast(enabled=True):
+                self.model1_features = {}
+                self.model2_features = {}
+                _ = self.model1(x)
+                _ = self.model2(x)
+            
+            for i, ((name1, feat1), (name2, feat2)) in enumerate(zip(
+                self.model1_features.items(), 
+                self.model2_features.items()
+            )):
+                if self.aggregation == 'flatten':
+                    X = feat1.flatten(1) 
+                    Y = feat2.flatten(1)
+                else:
+                    X = feat1.mean(dim=1)
+                    Y = feat2.mean(dim=1)
+                
+                K = X @ X.t()
+                L = Y @ Y.t()
+                K.fill_diagonal_(0.0)
+                L.fill_diagonal_(0.0)
+                
+                hsic_kl_sum[i] += self._HSIC(K, L)
+                hsic_kk_sum[i] += self._HSIC(K, K)
+                hsic_ll_sum[i] += self._HSIC(L, L)
+    
+        self.hsic_vector = hsic_kl_sum / torch.sqrt(hsic_kk_sum * hsic_ll_sum)
+
+        assert not torch.isnan(self.hsic_vector).any(), "HSIC computation resulted in NANs"
+
     def compare_simple(self, dataloader: DataLoader) -> None:
         self.model1_info['Dataset'] = self.model2_info['Dataset'] = dataloader.dataset.__repr__().split('\n')[0]
         
@@ -266,6 +309,7 @@ class CKA:
         self.hsic_vector = hsic_kl_sum / torch.sqrt(hsic_kk_sum * hsic_ll_sum)
 
         assert not torch.isnan(self.hsic_vector).any(), "HSIC computation resulted in NANs"
+
     
     def export(self, save_path: str = None) -> Dict:
         """
