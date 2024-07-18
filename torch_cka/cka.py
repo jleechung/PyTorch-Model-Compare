@@ -175,8 +175,13 @@ class CKA:
         ones = torch.ones(N, 1).to(self.device)
         ones = ones.to(torch.float16)
         result = torch.trace(K @ L)
+        print(K)
+        print(L)
+        print(result)
         result += ((ones.t() @ K @ ones @ ones.t() @ L @ ones) / ((N - 1) * (N - 2))).item()
+        print(result)
         result -= ((ones.t() @ K @ L @ ones) * 2 / (N - 2)).item()
+        print(result)
         return (1 / (N * (N - 3)) * result).item()
 
     def compare(self,
