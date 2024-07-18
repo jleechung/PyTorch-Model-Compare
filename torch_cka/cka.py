@@ -256,9 +256,11 @@ class CKA:
             )):
                 # for flatten
                 X = feat1.flatten(1).to(torch.float64) 
-                Y = feat2.flatten(1).to(torch.float64)
                 K = X @ X.t()
+                del X
+                Y = feat2.flatten(1).to(torch.float64)
                 L = Y @ Y.t()
+                del Y
                 K.fill_diagonal_(0.0)
                 L.fill_diagonal_(0.0)
 
@@ -268,9 +270,11 @@ class CKA:
                     
                 # for mean
                 X = feat1.mean(dim=1).to(torch.float64) 
-                Y = feat2.mean(dim=1).to(torch.float64) 
                 K = X @ X.t()
+                del X
+                Y = feat2.mean(dim=1).to(torch.float64) 
                 L = Y @ Y.t()
+                del Y
                 K.fill_diagonal_(0.0)
                 L.fill_diagonal_(0.0)
                 
@@ -278,7 +282,6 @@ class CKA:
                 hsic_kk_sum_mean[i] += self._HSIC(K, K)
                 hsic_ll_sum_mean[i] += self._HSIC(L, L)
 
-                del X, Y
                 torch.cuda.empty_cache()
         
         print(hsic_kk_sum_flatten, hsic_kl_sum_flatten, hsic_kl_sum_flatten)
