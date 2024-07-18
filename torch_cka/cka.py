@@ -18,6 +18,7 @@ class CKA:
                  model1_layers: List[str] = None,
                  model2_layers: List[str] = None,
                  aggregation: str = 'flatten',
+                 collate_size: int = 16,
                  device: str ='cpu'):
         """
 
@@ -36,6 +37,7 @@ class CKA:
         self.model2 = model2
 
         self.device = device
+        self.collate_size = collate_size
 
         self.model1_info = {}
         self.model2_info = {}
@@ -232,6 +234,80 @@ class CKA:
         self.model1_info['Dataset'] = self.model2_info['Dataset'] = dataloader.dataset.__repr__().split('\n')[0]
         
         num_layers = len(self.model1_layers) if self.model1_layers is not None else len(list(self.model1.modules()))
+        hsic_kl_sum_flatten = torch.zeros(num_layers, device=self.device)
+        hsic_kk_sum_flatten = torch.zeros(num_layers, device=self.device)
+        hsic_ll_sum_flatten = torch.zeros(num_layers, device=self.device)
+        hsic_kl_sum_mean = torch.zeros(num_layers, device=self.device)
+        hsic_kk_sum_mean = torch.zeros(num_layers, device=self.device)
+        hsic_ll_sum_mean = torch.zeros(num_layers, device=self.device)
+        
+        num_batches = len(dataloader)
+        collate_size = self.collate_size
+        features1_collated = {name: [] for name in self.model1_layers or []}
+        features2_collated = {name: [] for name in self.model2_layers or []}
+        
+        for batch_idx, (x, *_) in enumerate(tqdm(dataloader, desc="| Processing batches |", total=num_batches)):
+            x = x.to(next(self.model1.parameters()).device)
+            
+            with torch.autocast(device_type=self.device, dtype=torch.bfloat16):
+                self.model1_features = {}
+                self.model2_features = {}
+                for i in range(x.size(0)):  # Process each sample in the batch individually
+                    _ = self.model1(x[i:i+1])
+                    _ = self.model2(x[i:i+1])
+                    
+                    for name, feat in self.model1_features.items():
+                        features1_collated[name].append(feat.squeeze(0))
+                    for name, feat in self.model2_features.items():
+                        features2_collated[name].append(feat.squeeze(0))
+            
+            if (batch_idx + 1) % collate_size == 0 or batch_idx == num_batches - 1:
+                for i, ((name1, feat1_list), (name2, feat2_list)) in enumerate(zip(
+                    features1_collated.items(), 
+                    features2_collated.items()
+                )):
+                    feat1 = torch.stack(feat1_list).float()  # Convert to float for precision
+                    feat2 = torch.stack(feat2_list).float()
+                    
+                    # for flatten
+                    X = feat1.flatten(1) 
+                    Y = feat2.flatten(1)
+                    K = X @ X.t()
+                    L = Y @ Y.t()
+                    K.fill_diagonal_(0.0)
+                    L.fill_diagonal_(0.0)
+                    
+                    hsic_kl_sum_flatten[i] += self._HSIC(K, L)
+                    hsic_kk_sum_flatten[i] += self._HSIC(K, K)
+                    hsic_ll_sum_flatten[i] += self._HSIC(L, L)
+                    
+                    # for mean
+                    X = feat1.mean(dim=1)
+                    Y = feat2.mean(dim=1)
+                    K = X @ X.t()
+                    L = Y @ Y.t()
+                    K.fill_diagonal_(0.0)
+                    L.fill_diagonal_(0.0)
+                    
+                    hsic_kl_sum_mean[i] += self._HSIC(K, L)
+                    hsic_kk_sum_mean[i] += self._HSIC(K, K)
+                    hsic_ll_sum_mean[i] += self._HSIC(L, L)
+                
+                # Clear the collated features
+                features1_collated = {name: [] for name in self.model1_layers or []}
+                features2_collated = {name: [] for name in self.model2_layers or []}
+    
+        self.hsic_vector_flatten = hsic_kl_sum_flatten / torch.sqrt(hsic_kk_sum_flatten * hsic_ll_sum_flatten)
+        self.hsic_vector_mean = hsic_kl_sum_mean / torch.sqrt(hsic_kk_sum_mean * hsic_ll_sum_mean)
+        self.hsic_vector = {'flatten': self.hsic_vector_flatten, 'mean': self.hsic_vector_mean}
+        
+        assert not torch.isnan(self.hsic_vector_flatten).any(), "HSIC computation resulted in NANs for flatten"
+        assert not torch.isnan(self.hsic_vector_mean).any(), "HSIC computation resulted in NANs for mean"
+
+    def compare_simple_amp_aggr1(self, dataloader: DataLoader) -> None:
+        self.model1_info['Dataset'] = self.model2_info['Dataset'] = dataloader.dataset.__repr__().split('\n')[0]
+        
+        num_layers = len(self.model1_layers) if self.model1_layers is not None else len(list(self.model1.modules()))
         hsic_kl_sum_flatten = torch.zeros(num_layers)
         hsic_kk_sum_flatten = torch.zeros(num_layers)
         hsic_ll_sum_flatten = torch.zeros(num_layers)
@@ -242,11 +318,14 @@ class CKA:
         num_batches = len(dataloader)
         for x, *_ in tqdm(dataloader, desc="| Comparing features |", total=num_batches):
 
+            x = x.to(self.device)
+            x = x.to(next(self.model1.parameters()).device)
+
             with torch.autocast(enabled=True, device_type=self.device):
                 self.model1_features = {}
                 self.model2_features = {}
-                _ = self.model1(x.to(next(self.model1.parameters()).device))
-                _ = self.model2(x.to(next(self.model2.parameters()).device))
+                _ = self.model1(x)
+                _ = self.model2(x)
             
             for i, ((name1, feat1), (name2, feat2)) in enumerate(zip(
                 self.model1_features.items(), 
