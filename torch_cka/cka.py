@@ -271,6 +271,63 @@ class CKA:
 
         assert not torch.isnan(self.hsic_vector).any(), "HSIC computation resulted in NANs"
 
+    def compare_simple_amp_aggr(self, dataloader: DataLoader) -> None:
+        self.model1_info['Dataset'] = self.model2_info['Dataset'] = dataloader.dataset.__repr__().split('\n')[0]
+        
+        num_layers = len(self.model1_layers) if self.model1_layers is not None else len(list(self.model1.modules()))
+        hsic_kl_sum_flatten = torch.zeros(num_layers)
+        hsic_kk_sum_flatten = torch.zeros(num_layers)
+        hsic_ll_sum_flatten = torch.zeros(num_layers)
+        hsic_kl_sum_mean = torch.zeros(num_layers)
+        hsic_kk_sum_mean = torch.zeros(num_layers)
+        hsic_ll_sum_mean = torch.zeros(num_layers)
+        
+        num_batches = len(dataloader)
+        for x, *_ in tqdm(dataloader, desc="| Comparing features |", total=num_batches):
+
+            x = x.to(self.device)
+            
+            with torch.autocast(enabled=True, device_type=self.device):
+                self.model1_features = {}
+                self.model2_features = {}
+                _ = self.model1(x)
+                _ = self.model2(x)
+            
+            for i, ((name1, feat1), (name2, feat2)) in enumerate(zip(
+                self.model1_features.items(), 
+                self.model2_features.items()
+            )):
+                # for flatten
+                X = feat1.flatten(1) 
+                Y = feat2.flatten(1)
+                K = X @ X.t()
+                L = Y @ Y.t()
+                K.fill_diagonal_(0.0)
+                L.fill_diagonal_(0.0)
+                
+                hsic_kl_sum_flatten[i] += self._HSIC(K, L)
+                hsic_kk_sum_flatten[i] += self._HSIC(K, K)
+                hsic_ll_sum_flatten[i] += self._HSIC(L, L)
+
+                # for mean
+                X = feat1.mean(dim=1)
+                Y = feat2.mean(dim=1)
+                K = X @ X.t()
+                L = Y @ Y.t()
+                K.fill_diagonal_(0.0)
+                L.fill_diagonal_(0.0)
+                
+                hsic_kl_sum_mean[i] += self._HSIC(K, L)
+                hsic_kk_sum_mean[i] += self._HSIC(K, K)
+                hsic_ll_sum_mean[i] += self._HSIC(L, L)
+                       
+        self.hsic_vector_flatten = hsic_kl_sum_flatten / torch.sqrt(hsic_kk_sum_flatten * hsic_ll_sum_flatten)
+        self.hsic_vector_mean = hsic_kl_sum_mean / torch.sqrt(hsic_kk_sum_mean * hsic_ll_sum_mean)
+        self.hsic_vector = {'flatten': self.hsic_vector_flatten, 'mean': self.hsic_vector_mean}
+
+        assert not torch.isnan(self.hsic_vector_flatten).any(), "HSIC computation resulted in NANs"
+        assert not torch.isnan(self.hsic_vector_mean).any(), "HSIC computation resulted in NANs"
+    
     def compare_simple(self, dataloader: DataLoader) -> None:
         self.model1_info['Dataset'] = self.model2_info['Dataset'] = dataloader.dataset.__repr__().split('\n')[0]
         
