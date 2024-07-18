@@ -274,12 +274,12 @@ class CKA:
                 K = K.to(torch.float64)
                 L = L.to(torch.float64)
 
+                if torch.isinf(K).any():
+                    self.failures.append((X, Y))
+
                 hsic_kl_sum_flatten[i] += self._HSIC(K, L)
                 hsic_kk_sum_flatten[i] += self._HSIC(K, K)
                 hsic_ll_sum_flatten[i] += self._HSIC(L, L)
-
-                if hsic_kk_sum_flatten[i] == float('inf'):
-                    self.failures.append((X, Y))
                     
                 # for mean
                 X = feat1.mean(dim=1)
@@ -297,7 +297,7 @@ class CKA:
                 hsic_kk_sum_mean[i] += self._HSIC(K, K)
                 hsic_ll_sum_mean[i] += self._HSIC(L, L)
 
-                if hsic_kk_sum_mean[i] == float('inf'):
+                if torch.isinf(K).any():
                     self.failures.append((X, Y))
 
             del X, Y
