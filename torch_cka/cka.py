@@ -241,7 +241,7 @@ class CKA:
 
             x = x.to(self.device)
             
-            with torch.autocast(enabled=True):
+            with torch.autocast(enabled=True, device_type=self.device):
                 self.model1_features = {}
                 self.model2_features = {}
                 _ = self.model1(x)
