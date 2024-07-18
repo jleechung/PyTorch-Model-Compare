@@ -17,6 +17,7 @@ class CKA:
                  model2_name: str = None,
                  model1_layers: List[str] = None,
                  model2_layers: List[str] = None,
+                 aggregation: str = 'flatten',
                  device: str ='cpu'):
         """
 
@@ -28,6 +29,8 @@ class CKA:
         :param model2_layers: (List) List of layers to extract features from
         :param device: Device to run the model
         """
+
+        self.aggregation = aggregation
 
         self.model1 = model1
         self.model2 = model2
@@ -79,7 +82,7 @@ class CKA:
         self.model1.eval()
         self.model2.eval()
 
-    def _log_layer(self,
+    def _log_layer1(self,
                    model: str,
                    name: str,
                    layer: nn.Module,
@@ -95,7 +98,7 @@ class CKA:
         else:
             raise RuntimeError("Unknown model name for _log_layer.")
 
-    def _insert_hooks(self):
+    def _insert_hooks1(self):
         # Model 1
         for name, layer in self.model1.named_modules():
             if self.model1_layers is not None:
@@ -116,6 +119,49 @@ class CKA:
 
                 self.model2_info['Layers'] += [name]
                 layer.register_forward_hook(partial(self._log_layer, "model2", name))
+
+    def _log_layer(self,
+               model: str,
+               name: str,
+               layer: nn.Module,
+               inp: torch.Tensor,
+               out: torch.Tensor):
+        # Handle tuple outputs (like from attention layers)
+        if isinstance(out, tuple):
+            out = out[0]  # Assume the first element is the main output tensor
+    
+        if model == "model1":
+            self.model1_features[name] = out
+        elif model == "model2":
+            self.model2_features[name] = out
+        else:
+            raise RuntimeError("Unknown model name for _log_layer.")
+
+    def _insert_hooks(self):
+        def hook_fn(model: str, name: str):
+            def hook(module, inp, out):
+                self._log_layer(model, name, module, inp, out)
+            return hook
+    
+        # Model 1
+        for name, layer in self.model1.named_modules():
+            if self.model1_layers is not None:
+                if name in self.model1_layers:
+                    self.model1_info['Layers'] += [name]
+                    layer.register_forward_hook(hook_fn("model1", name))
+            else:
+                self.model1_info['Layers'] += [name]
+                layer.register_forward_hook(hook_fn("model1", name))
+    
+        # Model 2
+        for name, layer in self.model2.named_modules():
+            if self.model2_layers is not None:
+                if name in self.model2_layers:
+                    self.model2_info['Layers'] += [name]
+                    layer.register_forward_hook(hook_fn("model2", name))
+            else:
+                self.model2_info['Layers'] += [name]
+                layer.register_forward_hook(hook_fn("model2", name))
 
     def _HSIC(self, K, L):
         """
@@ -182,21 +228,65 @@ class CKA:
 
         assert not torch.isnan(self.hsic_matrix).any(), "HSIC computation resulted in NANs"
 
-    def export(self) -> Dict:
+    def compare_simple(self, dataloader: DataLoader) -> None:
+        self.model1_info['Dataset'] = self.model2_info['Dataset'] = dataloader.dataset.__repr__().split('\n')[0]
+        
+        num_layers = len(self.model1_layers) if self.model1_layers is not None else len(list(self.model1.modules()))
+        hsic_kl_sum = torch.zeros(num_layers)
+        hsic_kk_sum = torch.zeros(num_layers)
+        hsic_ll_sum = torch.zeros(num_layers)
+        
+        num_batches = len(dataloader)
+        for x, *_ in tqdm(dataloader, desc="| Comparing features |", total=num_batches):
+            self.model1_features = {}
+            self.model2_features = {}
+            _ = self.model1(x.to(self.device))
+            _ = self.model2(x.to(self.device))
+            
+            for i, ((name1, feat1), (name2, feat2)) in enumerate(zip(
+                self.model1_features.items(), 
+                self.model2_features.items()
+            )):
+                if self.aggregation == 'flatten':
+                    X = feat1.flatten(1) 
+                    Y = feat2.flatten(1)
+                else:
+                    X = feat1.mean(dim=1)
+                    Y = feat2.mean(dim=1)
+                
+                K = X @ X.t()
+                L = Y @ Y.t()
+                K.fill_diagonal_(0.0)
+                L.fill_diagonal_(0.0)
+                
+                hsic_kl_sum[i] += self._HSIC(K, L)
+                hsic_kk_sum[i] += self._HSIC(K, K)
+                hsic_ll_sum[i] += self._HSIC(L, L)
+    
+        self.hsic_vector = hsic_kl_sum / torch.sqrt(hsic_kk_sum * hsic_ll_sum)
+
+        assert not torch.isnan(self.hsic_vector).any(), "HSIC computation resulted in NANs"
+    
+    def export(self, save_path: str = None) -> Dict:
         """
         Exports the CKA data along with the respective model layer names.
         :return:
         """
-        return {
+        out = {
             "model1_name": self.model1_info['Name'],
             "model2_name": self.model2_info['Name'],
-            "CKA": self.hsic_matrix,
+            "CKA": self.hsic_vector,
             "model1_layers": self.model1_info['Layers'],
             "model2_layers": self.model2_info['Layers'],
-            "dataset1_name": self.model1_info['Dataset'],
-            "dataset2_name": self.model2_info['Dataset'],
-
+            # "dataset1_name": self.model1_info['Dataset'],
+            # "dataset2_name": self.model2_info['Dataset'],
         }
+        if save_path is not None:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            with open(save_path, 'wb') as file:
+                pickle.dump(out, file)
+            return 
+        return out
 
     def plot_results(self,
                      save_path: str = None,
