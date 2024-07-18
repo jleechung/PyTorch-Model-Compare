@@ -123,7 +123,6 @@ class CKA:
         # Model 1
         for name, layer in self.model1.named_modules():
             if self.model1_layers is not None:
-                print(name)
                 if name in self.model1_layers:
                     self.model1_info['Layers'] += [name]
                     layer.register_forward_hook(hook_fn("model1", name))
@@ -217,8 +216,6 @@ class CKA:
         hsic_kl_sum_mean = torch.zeros(num_layers)
         hsic_kk_sum_mean = torch.zeros(num_layers)
         hsic_ll_sum_mean = torch.zeros(num_layers)
-
-        print(self.model1_layers)
         
         num_batches = len(dataloader)
         for x, *_ in tqdm(dataloader, desc="| Comparing features |", total=num_batches):
