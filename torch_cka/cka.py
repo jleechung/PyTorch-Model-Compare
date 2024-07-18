@@ -97,28 +97,6 @@ class CKA:
         else:
             raise RuntimeError("Unknown model name for _log_layer.")
 
-    def _insert_hooks1(self):
-        # Model 1
-        for name, layer in self.model1.named_modules():
-            if self.model1_layers is not None:
-                if name in self.model1_layers:
-                    self.model1_info['Layers'] += [name]
-                    layer.register_forward_hook(partial(self._log_layer, "model1", name))
-            else:
-                self.model1_info['Layers'] += [name]
-                layer.register_forward_hook(partial(self._log_layer, "model1", name))
-
-        # Model 2
-        for name, layer in self.model2.named_modules():
-            if self.model2_layers is not None:
-                if name in self.model2_layers:
-                    self.model2_info['Layers'] += [name]
-                    layer.register_forward_hook(partial(self._log_layer, "model2", name))
-            else:
-
-                self.model2_info['Layers'] += [name]
-                layer.register_forward_hook(partial(self._log_layer, "model2", name))
-
     def _log_layer(self,
                model: str,
                name: str,
@@ -145,6 +123,7 @@ class CKA:
         # Model 1
         for name, layer in self.model1.named_modules():
             if self.model1_layers is not None:
+                print(name)
                 if name in self.model1_layers:
                     self.model1_info['Layers'] += [name]
                     layer.register_forward_hook(hook_fn("model1", name))
@@ -238,6 +217,8 @@ class CKA:
         hsic_kl_sum_mean = torch.zeros(num_layers)
         hsic_kk_sum_mean = torch.zeros(num_layers)
         hsic_ll_sum_mean = torch.zeros(num_layers)
+
+        print(self.model1_layers)
         
         num_batches = len(dataloader)
         for x, *_ in tqdm(dataloader, desc="| Comparing features |", total=num_batches):
@@ -257,6 +238,8 @@ class CKA:
                 # for flatten
                 X = feat1.flatten(1).to(torch.float64) 
                 K = X @ X.t()
+                if torch.isnan(K).any():
+                    self.failures.append(X)
                 del X
                 Y = feat2.flatten(1).to(torch.float64)
                 L = Y @ Y.t()
