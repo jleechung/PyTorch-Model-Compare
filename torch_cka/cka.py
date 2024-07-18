@@ -173,6 +173,7 @@ class CKA:
         """
         N = K.shape[0]
         ones = torch.ones(N, 1).to(self.device)
+        ones = ones.float()
         result = torch.trace(K @ L)
         result += ((ones.t() @ K @ ones @ ones.t() @ L @ ones) / ((N - 1) * (N - 2))).item()
         result -= ((ones.t() @ K @ L @ ones) * 2 / (N - 2)).item()
