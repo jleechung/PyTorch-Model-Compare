@@ -173,7 +173,7 @@ class CKA:
         """
         N = K.shape[0]
         ones = torch.ones(N, 1).to(self.device)
-        ones = ones.float()
+        ones = ones.to(torch.float32)
         print('########################## In _HSIC')
         print(f'K.dtype: {K.dtype}')
         print(f'L.dtype: {L.dtype}')
@@ -270,10 +270,8 @@ class CKA:
                 L = Y @ Y.t()
                 K.fill_diagonal_(0.0)
                 L.fill_diagonal_(0.0)
-                K = K.float()
-                L = L.float()
-                print(f'K.dtype: {K.dtype}')
-                print(f'L.dtype: {L.dtype}')
+                K = K.to(torch.float32)
+                L = L.to(torch.float32)
 
                 hsic_kl_sum_flatten[i] += self._HSIC(K, L)
                 hsic_kk_sum_flatten[i] += self._HSIC(K, K)
@@ -286,6 +284,8 @@ class CKA:
                 L = Y @ Y.t()
                 K.fill_diagonal_(0.0)
                 L.fill_diagonal_(0.0)
+                K = K.to(torch.float32)
+                L = L.to(torch.float32)
                 
                 hsic_kl_sum_mean[i] += self._HSIC(K, L)
                 hsic_kk_sum_mean[i] += self._HSIC(K, K)
