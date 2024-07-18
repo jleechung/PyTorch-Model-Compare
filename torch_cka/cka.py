@@ -286,7 +286,7 @@ class CKA:
                 hsic_ll_sum_mean[i] += self._HSIC(L, L)
 
             del X, Y
-            torch.cuda().empty_cache()
+            torch.cuda.empty_cache()
         
         print(hsic_kk_sum_flatten, hsic_kl_sum_flatten, hsic_kl_sum_flatten)
         print(hsic_kk_sum_mean, hsic_kl_sum_mean, hsic_kl_sum_mean)
