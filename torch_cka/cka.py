@@ -7,7 +7,8 @@ from warnings import warn
 from typing import List, Dict
 import matplotlib.pyplot as plt
 from .utils import add_colorbar
-
+import os
+import pickle
 
 class CKA:
     def __init__(self,
@@ -17,8 +18,6 @@ class CKA:
                  model2_name: str = None,
                  model1_layers: List[str] = None,
                  model2_layers: List[str] = None,
-                 aggregation: str = 'flatten',
-                 collate_size: int = 16,
                  device: str ='cpu'):
         """
 
@@ -31,13 +30,11 @@ class CKA:
         :param device: Device to run the model
         """
 
-        self.aggregation = aggregation
-
         self.model1 = model1
         self.model2 = model2
 
         self.device = device
-        self.collate_size = collate_size
+        self.failures = []
 
         self.model1_info = {}
         self.model2_info = {}
@@ -239,7 +236,7 @@ class CKA:
 
         assert not torch.isnan(self.hsic_matrix).any(), "HSIC computation resulted in NANs"
 
-    def compare_simple_amp_aggr(self, dataloader: DataLoader) -> None:
+    def compare_simple(self, dataloader: DataLoader) -> None:
         self.model1_info['Dataset'] = self.model2_info['Dataset'] = dataloader.dataset.__repr__().split('\n')[0]
         
         num_layers = len(self.model1_layers) if self.model1_layers is not None else len(list(self.model1.modules()))
@@ -281,6 +278,9 @@ class CKA:
                 hsic_kk_sum_flatten[i] += self._HSIC(K, K)
                 hsic_ll_sum_flatten[i] += self._HSIC(L, L)
 
+                if hsic_kk_sum_flatten[i] == float('inf'):
+                    self.failures.append((X, Y))
+                    
                 # for mean
                 X = feat1.mean(dim=1)
                 Y = feat2.mean(dim=1)
@@ -297,6 +297,9 @@ class CKA:
                 hsic_kk_sum_mean[i] += self._HSIC(K, K)
                 hsic_ll_sum_mean[i] += self._HSIC(L, L)
 
+                if hsic_kk_sum_mean[i] == float('inf'):
+                    self.failures.append((X, Y))
+
             del X, Y
             torch.cuda.empty_cache()
         
@@ -310,49 +313,9 @@ class CKA:
         print(self.hsic_vector_flatten)
         print(self.hsic_vector_mean)
 
-        assert not torch.isnan(self.hsic_vector_flatten).any(), "HSIC computation resulted in NANs"
-        assert not torch.isnan(self.hsic_vector_mean).any(), "HSIC computation resulted in NANs"
-    
-    def compare_simple(self, dataloader: DataLoader) -> None:
-        self.model1_info['Dataset'] = self.model2_info['Dataset'] = dataloader.dataset.__repr__().split('\n')[0]
+        # assert not torch.isnan(self.hsic_vector_flatten).any(), "HSIC computation resulted in NANs"
+        # assert not torch.isnan(self.hsic_vector_mean).any(), "HSIC computation resulted in NANs"
         
-        num_layers = len(self.model1_layers) if self.model1_layers is not None else len(list(self.model1.modules()))
-        hsic_kl_sum = torch.zeros(num_layers)
-        hsic_kk_sum = torch.zeros(num_layers)
-        hsic_ll_sum = torch.zeros(num_layers)
-        
-        num_batches = len(dataloader)
-        for x, *_ in tqdm(dataloader, desc="| Comparing features |", total=num_batches):
-            self.model1_features = {}
-            self.model2_features = {}
-            _ = self.model1(x.to(self.device))
-            _ = self.model2(x.to(self.device))
-            
-            for i, ((name1, feat1), (name2, feat2)) in enumerate(zip(
-                self.model1_features.items(), 
-                self.model2_features.items()
-            )):
-                if self.aggregation == 'flatten':
-                    X = feat1.flatten(1) 
-                    Y = feat2.flatten(1)
-                else:
-                    X = feat1.mean(dim=1)
-                    Y = feat2.mean(dim=1)
-                
-                K = X @ X.t()
-                L = Y @ Y.t()
-                K.fill_diagonal_(0.0)
-                L.fill_diagonal_(0.0)
-                
-                hsic_kl_sum[i] += self._HSIC(K, L)
-                hsic_kk_sum[i] += self._HSIC(K, K)
-                hsic_ll_sum[i] += self._HSIC(L, L)
-    
-        self.hsic_vector = hsic_kl_sum / torch.sqrt(hsic_kk_sum * hsic_ll_sum)
-
-        assert not torch.isnan(self.hsic_vector).any(), "HSIC computation resulted in NANs"
-
-    
     def export(self, save_path: str = None) -> Dict:
         """
         Exports the CKA data along with the respective model layer names.
@@ -362,6 +325,7 @@ class CKA:
             "model1_name": self.model1_info['Name'],
             "model2_name": self.model2_info['Name'],
             "CKA": self.hsic_vector,
+            "failures": self.failures,
             "model1_layers": self.model1_info['Layers'],
             "model2_layers": self.model2_info['Layers'],
             # "dataset1_name": self.model1_info['Dataset'],
