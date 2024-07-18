@@ -246,9 +246,8 @@ class CKA:
         for x, *_ in tqdm(dataloader, desc="| Comparing features |", total=num_batches):
 
             x = x.to(self.device)
-            x = x.to(next(self.model1.parameters()).device)
 
-            with torch.autocast(enabled=True, device_type=self.device):
+            with torch.autocast(enabled=True, device_type=self.device), torch.no_grad():
                 self.model1_features = {}
                 self.model2_features = {}
                 _ = self.model1(x)
@@ -285,10 +284,19 @@ class CKA:
                 hsic_kl_sum_mean[i] += self._HSIC(K, L)
                 hsic_kk_sum_mean[i] += self._HSIC(K, K)
                 hsic_ll_sum_mean[i] += self._HSIC(L, L)
-                       
+
+            del X, Y
+            torch.cuda().empty_cache()
+        
+        print(hsic_kk_sum_flatten, hsic_kl_sum_flatten, hsic_kl_sum_flatten)
+        print(hsic_kk_sum_mean, hsic_kl_sum_mean, hsic_kl_sum_mean)
+
         self.hsic_vector_flatten = hsic_kl_sum_flatten / torch.sqrt(hsic_kk_sum_flatten * hsic_ll_sum_flatten)
         self.hsic_vector_mean = hsic_kl_sum_mean / torch.sqrt(hsic_kk_sum_mean * hsic_ll_sum_mean)
         self.hsic_vector = {'flatten': self.hsic_vector_flatten, 'mean': self.hsic_vector_mean}
+
+        print(self.hsic_vector_flatten)
+        print(self.hsic_vector_mean)
 
         assert not torch.isnan(self.hsic_vector_flatten).any(), "HSIC computation resulted in NANs"
         assert not torch.isnan(self.hsic_vector_mean).any(), "HSIC computation resulted in NANs"
