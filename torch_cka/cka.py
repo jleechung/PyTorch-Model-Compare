@@ -268,6 +268,8 @@ class CKA:
                 # for flatten
                 X = feat1.flatten(1) 
                 Y = feat2.flatten(1)
+                print(f'X flat.: {X}')
+                print(f'Y flat.: {Y}')
                 K = X @ X.t()
                 L = Y @ Y.t()
                 K.fill_diagonal_(0.0)
@@ -282,6 +284,8 @@ class CKA:
                 # for mean
                 X = feat1.mean(dim=1)
                 Y = feat2.mean(dim=1)
+                print(f'X mean.: {X}')
+                print(f'Y mean.: {Y}')
                 K = X @ X.t()
                 L = Y @ Y.t()
                 K.fill_diagonal_(0.0)
