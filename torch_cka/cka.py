@@ -275,7 +275,7 @@ class CKA:
                 L = L.to(torch.float64)
 
                 if torch.isinf(K).any() and len(self.failures) == 0:
-                    self.failures.append((X, Y))
+                    self.failures.append((X.detach().cpu(), Y.detach().cpu()))
 
                 hsic_kl_sum_flatten[i] += self._HSIC(K, L)
                 hsic_kk_sum_flatten[i] += self._HSIC(K, K)
