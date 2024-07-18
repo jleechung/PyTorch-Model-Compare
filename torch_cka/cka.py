@@ -274,7 +274,7 @@ class CKA:
                 K = K.to(torch.float64)
                 L = L.to(torch.float64)
 
-                if torch.isinf(K).any():
+                if torch.isinf(K).any() and len(self.failures) == 0:
                     self.failures.append((X, Y))
 
                 hsic_kl_sum_flatten[i] += self._HSIC(K, L)
@@ -296,9 +296,6 @@ class CKA:
                 hsic_kl_sum_mean[i] += self._HSIC(K, L)
                 hsic_kk_sum_mean[i] += self._HSIC(K, K)
                 hsic_ll_sum_mean[i] += self._HSIC(L, L)
-
-                if torch.isinf(K).any():
-                    self.failures.append((X, Y))
 
             del X, Y
             torch.cuda.empty_cache()
