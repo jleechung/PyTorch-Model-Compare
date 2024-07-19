@@ -247,15 +247,19 @@ class CKA:
                 hsic_ll_sum_flatten[i] += self._HSIC(L, L)
 
                 print(f'\nCheck range {i} -----------------------------------')
-                print(hsic_kl_sum_mean[i])
-                print(hsic_kk_sum_mean[i])
-                print(hsic_ll_sum_mean[i])
+                print(hsic_kl_sum_flatten[i])
+                print(hsic_kk_sum_flatten[i])
+                print(hsic_ll_sum_flatten[i])
     
                 # for mean
                 X = feat1.mean(dim=1).to(torch.float64) 
+                if torch.isnan(hsic_ll_sum_flatten[i]):
+                    self.failures.append(X.detach().cpu())
                 K = X @ X.t()
                 del X
                 Y = feat2.mean(dim=1).to(torch.float64) 
+                if torch.isnan(hsic_ll_sum_flatten[i]):
+                    self.failures.append(Y.detach().cpu())
                 L = Y @ Y.t()
                 del Y
                 K.fill_diagonal_(0.0)
