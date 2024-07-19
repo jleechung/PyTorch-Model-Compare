@@ -253,12 +253,12 @@ class CKA:
     
                 # for mean
                 X = feat1.mean(dim=1).to(torch.float64) 
-                if torch.isnan(hsic_ll_sum_flatten[i]):
+                if torch.isnan(hsic_ll_sum_flatten[i]) and len(self.failures) == 0:
                     self.failures.append(X.detach().cpu())
                 K = X @ X.t()
                 del X
                 Y = feat2.mean(dim=1).to(torch.float64) 
-                if torch.isnan(hsic_ll_sum_flatten[i]):
+                if torch.isnan(hsic_ll_sum_flatten[i]) and len(self.failures) == 0:
                     self.failures.append(Y.detach().cpu())
                 L = Y @ Y.t()
                 del Y
